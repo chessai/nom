@@ -218,14 +218,17 @@ endOfLine e = do
     13 -> byte e 10
     _ -> failure e
 
+fixedByte :: e -> Word8 -> FixedParser e ()
+fixedByte e (W8# w) = FixedParser 1# (\_ -> e) $ \_ _ -> ()
+
+{-
+{-# INLINE fixedAny #-}
+fixedAny :: e -> FixedParser e Word8
+fixedAny e = FixedParser 1# (\_ -> e) (\arr off -> W8# (indexWord8Array# arr off))
+-}
+
 byte :: e -> Word8 -> Parser e ()
--- TODO: use a bounded size parser for this.
-byte e (W8# w) = Parser $ ParserLevity $ \arr off end ->
-  case end ># off of
-    1# -> case eqWord# (indexWord8Array# arr off) w of
-      1# -> (# off +# 1#, (# | () #) #)
-      _ -> (# off, (# e | #) #)
-    _ -> (# end, (# e | #) #)
+byte e = fixedParserToParser . fixedByte e
 
 peek :: e -> Parser e Word8
 peek e = Parser $ ParserLevity $ \arr off end ->
@@ -288,12 +291,6 @@ takeBytesUntilEndOfLineConsume e = Parser $ ParserLevity $ \arr off end ->
           1# -> (# ix +# 2#, (# | (Bytes (ByteArray arr) (I# off) (I# (ix -# off))) #) #)
           _ -> (# ix +# 2#, (# e | #) #)
         _ -> (# end, (# e | #) #)
-
-take :: e -> Int -> Parser e Bytes
--- consider rewriting this as a fixed parser
-take e (I# n# ) = Parser $ ParserLevity $ \arr off end -> case (end -# off) >=# n# of
-  1# -> (# off +# n#, (# | Bytes (PM.ByteArray arr) (I# off) (I# n#) #) #)
-  _ -> (# end, (# e | #) #)
 -}
 
 take :: e -> Int -> Parser e Bytes
@@ -302,7 +299,7 @@ take e = fixedParserToParser . fixedTake e
 
 fixedTake :: e -> Int -> FixedParser e Bytes
 fixedTake e (I# i#) = FixedParser i# (\_ -> e) $ \arr# off#
-  -> Bytes (ByteArray arr#) (I# off#) (I# (i# -# off#))
+  -> Bytes (ByteArray arr#) (I# off#) (I# i#)
 
 {-# INLINE bigEndianWord64 #-}
 bigEndianWord64 :: e -> Parser e Word64
